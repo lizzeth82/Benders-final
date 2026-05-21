@@ -1,0 +1,276 @@
+<?php
+// ============================================================
+//  menu.php — Vista pública para clientes
+// ============================================================
+session_start();
+if (!isset($_SESSION['usuario']) || $_SESSION['usuario']['rol'] !== 'cliente') {
+    header('Location: login.php'); exit;
+}
+require_once 'config.php';
+require_once 'funciones.php';
+require_once 'assets/logo_b64.php';
+
+$productos  = getProductosDisponibles($pdo);
+$categorias = [];
+foreach ($productos as $p) $categorias[$p['categoria']][] = $p;
+$usuario = $_SESSION['usuario'];
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Menú — Bender's Chilaquiles</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'DM Sans',sans-serif;background:#0D0D0D;color:#F0EEE8;min-height:100vh}
+
+    /* HEADER */
+    header{background:#161616;border-bottom:1px solid rgba(255,255,255,.07);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+    .header-logo{display:flex;align-items:center;gap:10px}
+    .header-logo .icon{width:36px;height:36px;background:#E91E8C;border-radius:8px;display:grid;place-items:center;font-size:18px}
+    .header-logo strong{font-size:16px;color:#fff}
+    .header-right{display:flex;align-items:center;gap:12px}
+    .header-user{font-size:13px;color:rgba(240,238,232,.45)}
+    .btn-logout{background:rgba(255,255,255,.07);color:rgba(240,238,232,.6);border:1px solid rgba(255,255,255,.1);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none}
+
+    /* HERO */
+    .hero{background:#1E1E1E;border-bottom:1px solid rgba(255,255,255,.06);padding:40px 24px;text-align:center}
+    .hero h1{font-family:'Playfair Display',serif;font-size:36px;font-weight:800;color:#fff;margin-bottom:6px}
+    .hero h1 span{color:#F9C61F}
+    .hero p{color:rgba(240,238,232,.4);font-size:14px;margin-bottom:16px}
+    .badge-desde{display:inline-flex;align-items:center;gap:6px;background:rgba(249,198,31,.1);border:1px solid rgba(249,198,31,.2);color:#F9C61F;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600}
+
+    /* CONTENT */
+    .content{max-width:900px;margin:0 auto;padding:32px 24px}
+
+    /* CATEGORIA */
+    .cat-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#E91E8C;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(233,30,140,.2)}
+
+    /* PRODUCTOS GRID */
+    .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-bottom:32px}
+    .prod-card{background:#1E1E1E;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:18px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;transition:border-color .15s,transform .15s;cursor:pointer}
+    .prod-card:hover{border-color:rgba(233,30,140,.3);transform:translateY(-2px)}
+    .prod-card.selected{border-color:#E91E8C;background:rgba(233,30,140,.06)}
+    .prod-info{flex:1}
+    .prod-nombre{font-size:14px;font-weight:600;color:#fff;margin-bottom:4px}
+    .prod-desc{font-size:12px;color:rgba(240,238,232,.35);line-height:1.5;margin-bottom:8px}
+    .prod-precio{font-size:20px;font-weight:700;color:#F9C61F}
+    .prod-check{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.07);border:none;color:rgba(240,238,232,.4);font-size:16px;display:grid;place-items:center;cursor:pointer;transition:all .15s;flex-shrink:0;margin-top:2px}
+    .prod-card.selected .prod-check{background:#E91E8C;color:#fff}
+
+    /* CARRITO FLOTANTE */
+    .carrito{position:fixed;bottom:24px;right:24px;background:#1E1E1E;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:16px 20px;min-width:240px;max-width:320px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+    .carrito h3{font-size:13px;font-weight:700;color:#fff;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+    .carrito-items{max-height:160px;overflow-y:auto;margin-bottom:12px}
+    .carrito-item{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px}
+    .carrito-item:last-child{border-bottom:none}
+    .carrito-item-name{color:rgba(240,238,232,.7);flex:1}
+    .carrito-item-ctrl{display:flex;align-items:center;gap:6px}
+    .qty-btn{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:14px;cursor:pointer;display:grid;place-items:center;line-height:1}
+    .qty-num{font-weight:700;color:#fff;min-width:16px;text-align:center;font-size:13px}
+    .carrito-total{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}
+    .carrito-total span:first-child{font-size:12px;color:rgba(240,238,232,.4)}
+    .carrito-total strong{font-size:22px;font-weight:700;color:#F9C61F}
+    .btn-pedir{width:100%;padding:11px;background:#E91E8C;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+    .btn-pedir:hover{background:#B5116A}
+    .btn-pedir:disabled{background:rgba(255,255,255,.1);color:rgba(240,238,232,.3);cursor:not-allowed}
+    .carrito-empty{text-align:center;color:rgba(240,238,232,.3);font-size:12px;padding:8px 0}
+
+    /* MODAL CONFIRMACIÓN */
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:200;padding:20px}
+    .modal-bg.show{display:flex}
+    .modal{background:#1E1E1E;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:28px;width:100%;max-width:400px}
+    .modal h3{font-size:18px;font-weight:700;color:#fff;margin-bottom:16px}
+    .modal .form-group{margin-bottom:14px}
+    .modal label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:rgba(240,238,232,.4);margin-bottom:5px}
+    .modal select,.modal input,.modal textarea{width:100%;padding:10px 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.1);border-radius:8px;color:#F0EEE8;font-size:13px;font-family:inherit;outline:none}
+    .modal select:focus,.modal input:focus,.modal textarea:focus{border-color:#E91E8C}
+    .modal select option{background:#1E1E1E}
+    .modal-btns{display:flex;gap:10px;margin-top:20px}
+    .btn-confirmar{flex:1;padding:12px;background:#E91E8C;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-cancelar{padding:12px 18px;background:rgba(255,255,255,.07);color:rgba(240,238,232,.6);border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit}
+
+    .success-msg{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);color:#4ADE80;padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-logo">
+    <div class="icon" style="padding:0;overflow:hidden"><img src="<?= LOGO_B64 ?>" alt="Benders" style="width:36px;height:36px;border-radius:8px;object-fit:contain;background:#fff;padding:3px;display:block"></div>
+    <strong>Bender's Chilaquiles</strong>
+  </div>
+  <div class="header-right">
+    <span class="header-user">Hola, <?= htmlspecialchars($usuario['nombre']) ?> 👋</span>
+    <a href="logout.php" class="btn-logout">Cerrar sesión</a>
+  </div>
+</header>
+
+<div class="hero">
+  <h1>Deliciosos <span>Chilaquiles</span></h1>
+  <p>Elige tus platillos favoritos y haz tu pedido</p>
+  <div class="badge-desde">🍲 Desde $60 MXN · Para llevar en cajita</div>
+</div>
+
+<div class="content">
+
+  <div id="successMsg" class="success-msg">✅ ¡Pedido registrado! Te avisamos cuando esté listo.</div>
+
+  <?php foreach ($categorias as $cat => $prods): ?>
+  <div class="cat-title"><?= htmlspecialchars($cat) ?></div>
+  <div class="prod-grid">
+    <?php foreach ($prods as $p): ?>
+    <div class="prod-card" id="card-<?= $p['id_producto'] ?>" onclick="toggleProducto(<?= $p['id_producto'] ?>, '<?= addslashes(htmlspecialchars($p['nombre'])) ?>', <?= $p['precio'] ?>)">
+      <div class="prod-info">
+        <div class="prod-nombre"><?= htmlspecialchars($p['nombre']) ?></div>
+        <div class="prod-desc"><?= htmlspecialchars($p['descripcion'] ?? '') ?></div>
+        <div class="prod-precio">$<?= number_format($p['precio'], 2) ?></div>
+      </div>
+      <button class="prod-check" id="check-<?= $p['id_producto'] ?>">+</button>
+    </div>
+    <?php endforeach; ?>
+  </div>
+  <?php endforeach; ?>
+</div>
+
+<!-- CARRITO FLOTANTE -->
+<div class="carrito">
+  <h3>🛒 Mi pedido</h3>
+  <div class="carrito-items" id="carritoItems">
+    <div class="carrito-empty">Selecciona platillos del menú</div>
+  </div>
+  <div class="carrito-total">
+    <span>Total</span>
+    <strong id="carritoTotal">$0.00</strong>
+  </div>
+  <button class="btn-pedir" id="btnPedir" disabled onclick="abrirModal()">Hacer pedido →</button>
+</div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3>Confirmar pedido</h3>
+    <div class="form-group">
+      <label>Canal de entrega</label>
+      <select id="modalPlataforma">
+        <?php
+        require_once 'funciones.php';
+require_once 'assets/logo_b64.php';
+        foreach (getPlataformas($pdo) as $pl):
+        ?>
+        <option value="<?= $pl['id_plataforma'] ?>"><?= htmlspecialchars($pl['nombre']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Tipo de entrega</label>
+      <select id="modalEntrega">
+        <option value="recoger">Recoger en local</option>
+        <option value="domicilio">A domicilio</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Notas especiales</label>
+      <textarea id="modalNotas" rows="2" placeholder="Sin cebolla, extra crema..."></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancelar" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn-confirmar" onclick="enviarPedido()">✓ Confirmar pedido</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let carrito = {};
+
+function toggleProducto(id, nombre, precio) {
+  if (carrito[id]) {
+    carrito[id].cantidad++;
+  } else {
+    carrito[id] = { nombre, precio, cantidad: 1 };
+  }
+  document.getElementById('card-'+id).classList.add('selected');
+  document.getElementById('check-'+id).textContent = '✓';
+  renderCarrito();
+}
+
+function cambiarCantidad(id, delta) {
+  if (!carrito[id]) return;
+  carrito[id].cantidad += delta;
+  if (carrito[id].cantidad <= 0) {
+    delete carrito[id];
+    document.getElementById('card-'+id)?.classList.remove('selected');
+    const chk = document.getElementById('check-'+id);
+    if (chk) chk.textContent = '+';
+  }
+  renderCarrito();
+}
+
+function renderCarrito() {
+  const items = Object.entries(carrito);
+  const cont  = document.getElementById('carritoItems');
+  const btn   = document.getElementById('btnPedir');
+
+  if (items.length === 0) {
+    cont.innerHTML = '<div class="carrito-empty">Selecciona platillos del menú</div>';
+    document.getElementById('carritoTotal').textContent = '$0.00';
+    btn.disabled = true;
+    return;
+  }
+
+  let total = 0, html = '';
+  items.forEach(([id, item]) => {
+    total += item.precio * item.cantidad;
+    html += `<div class="carrito-item">
+      <span class="carrito-item-name">${item.nombre}</span>
+      <div class="carrito-item-ctrl">
+        <button class="qty-btn" onclick="cambiarCantidad(${id},-1)">−</button>
+        <span class="qty-num">${item.cantidad}</span>
+        <button class="qty-btn" onclick="cambiarCantidad(${id},1)">+</button>
+      </div>
+    </div>`;
+  });
+
+  cont.innerHTML = html;
+  document.getElementById('carritoTotal').textContent = '$' + total.toFixed(2);
+  btn.disabled = false;
+}
+
+function abrirModal()  { document.getElementById('modalBg').classList.add('show'); }
+function cerrarModal() { document.getElementById('modalBg').classList.remove('show'); }
+
+async function enviarPedido() {
+  const items = Object.entries(carrito).map(([id, item]) => ({
+    id_producto: parseInt(id),
+    cantidad: item.cantidad
+  }));
+  if (!items.length) return;
+
+  const body = new URLSearchParams({
+    id_plataforma: document.getElementById('modalPlataforma').value,
+    tipo_entrega:  document.getElementById('modalEntrega').value,
+    notas:         document.getElementById('modalNotas').value,
+    items:         JSON.stringify(items)
+  });
+
+  const res  = await fetch('api/pedido_cliente.php', { method:'POST', body });
+  const data = await res.json();
+
+  if (data.ok) {
+    cerrarModal();
+    carrito = {};
+    renderCarrito();
+    document.querySelectorAll('.prod-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('.prod-check').forEach(c => c.textContent = '+');
+    const msg = document.getElementById('successMsg');
+    msg.style.display = 'block';
+    setTimeout(() => msg.style.display = 'none', 5000);
+  } else {
+    alert('Error al registrar el pedido. Intenta de nuevo.');
+  }
+}
+</script>
+</body>
+</html>
